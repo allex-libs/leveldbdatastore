@@ -1,0 +1,22 @@
+{
+  "name": "allex_leveldbdatastorelib",
+  "version": "1.0.0",
+  "description": "AllexJS library for a LevelDB-based data store",
+  "main": "index.js",
+  "scripts": {
+    "test": "allex-mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@gitlab.hers.rs:allex_libs/leveldbdatastore.git"
+  },
+  "keywords": [
+    "ecosystem:AllexJS",
+    "leveldb",
+    "data",
+    "store",
+    "lib"
+  ],
+  "author": "HERS Belgrade",
+  "license": "ISC"
+}
