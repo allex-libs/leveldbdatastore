@@ -5,6 +5,10 @@ function createDataStore (execlib, leveldblib) {
     q = lib.q,
     qlib = lib.qlib;
 
+  function rejecter (defer) {
+    defer.reject(new lib.Error('LDB_DATASTORE_DESTROYING'));
+  }
+
   function LDBDataStore (path, outerfetchercb, starteddefer) {
     var mystarteddefer;
     this.outerFetcher = null;
@@ -24,8 +28,14 @@ function createDataStore (execlib, leveldblib) {
       starteddefer: mystarteddefer
     });
     this.setOuterFetcher(outerfetchercb);
+    this.outerFetchDefers = new lib.Map();
   }
   LDBDataStore.prototype.destroy = function () {
+    if (this.outerFetchDefers) {
+      this.outerFetchDefers.traverse(rejecter);
+      this.outerFetchDefers.destroy;
+    }
+    this.outerFetchDefers = null;
     if (this.ldb) {
       this.ldb.destroy();
     }
@@ -60,18 +70,35 @@ function createDataStore (execlib, leveldblib) {
   LDBDataStore.prototype.onFetchAndReportMissing = function (foundandmissing) {
     console.log(foundandmissing);
     var found = foundandmissing.found,
-      missing = foundandmissing.missing;
+      missing = foundandmissing.missing,
+      missingpromises,
+      tofetch;
     if (!(missing && missing.length>0)) {
       return q(found);
     }
     if (!this.outerFetcher) {
       return q.reject(new lib.Error('NO_OUTER_FETCHER_CB', 'Cannot fecher outer data without an outerFetcher function'));
     }
-    return this.outerFetcher(missing).then(
-      this.putMissing.bind(this)
-    ).then(
-      this.resolveMissingFound.bind(this, found, missing)
-    );
+    missingpromises = [];
+    tofetch = [];
+    missing.forEach(this.decideForOuterFetch.bind(this, missingpromises, tofetch));
+    console.log('missingpromises', missingpromises, 'tofetch', tofetch);
+    if (tofetch.length>0) {
+      this.outerFetcher(tofetch).then(
+        this.putMissing.bind(this)
+      );
+    }
+    return q.all(missingpromises);
+  };
+
+  LDBDataStore.prototype.decideForOuterFetch = function (missingpromises, tofetch, miss) {
+    var fd = this.outerFetchDefers.get(miss);
+    if (!fd) {
+      fd = q.defer();
+      tofetch.push(miss);
+      this.outerFetchDefers.add(miss, fd);
+    }
+    missingpromises.push(fd.promise);
   };
 
   LDBDataStore.prototype.onSingleFetchedForReportMissing = function (keys, defer, index, found, missing, dbval) {
@@ -84,12 +111,8 @@ function createDataStore (execlib, leveldblib) {
     this.fetchAndReportMissing(keys, defer, index+1, found, missing);
   };
 
-  LDBDataStore.prototype.resolveMissingFound = function (found, missing, missingfound) {
-    //check if all the missings are resolved in missingfound
-    return q(found.concat(missingfound));
-  };
-
   LDBDataStore.prototype.putMissing = function (missingfound, defer, index) {
+    console.log('putMissing', index);
     var keyval;
     defer = defer || q.defer();
     index = index || 0;
@@ -98,10 +121,21 @@ function createDataStore (execlib, leveldblib) {
     } else {
       keyval = missingfound[index];
       this.ldb.put(keyval[0], keyval[1]).then(
-        this.putMissing.bind(this, missingfound, defer, index+1)
+        this.resolveFetchDeferAfterSuccessfulPut.bind(this, missingfound, defer, index)
       );
     }
     return defer.promise;
+  };
+
+  LDBDataStore.prototype.resolveFetchDeferAfterSuccessfulPut = function (missingfound, defer, index) {
+    var keyval = missingfound[index];
+    console.log('resolveFetchDeferAfterSuccessfulPut', keyval);
+    var fd = this.outerFetchDefers.remove(keyval[0]);
+    console.log('for key', keyval[0], 'got defer', fd);
+    if (fd) {
+      fd.resolve(keyval);
+    }
+    this.putMissing(missingfound, defer, index+1);
   };
 
   return q(LDBDataStore);
