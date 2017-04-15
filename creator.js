@@ -88,7 +88,7 @@ function createDataStore (execlib, leveldblib) {
         this.putMissing.bind(this)
       );
     }
-    return q.all(missingpromises);
+    return q.all(missingpromises).then(foundNmissingJoiner.bind(null, found));
   };
 
   LDBDataStore.prototype.decideForOuterFetch = function (missingpromises, tofetch, miss) {
@@ -112,7 +112,6 @@ function createDataStore (execlib, leveldblib) {
   };
 
   LDBDataStore.prototype.putMissing = function (missingfound, defer, index) {
-    console.log('putMissing', index);
     var keyval;
     defer = defer || q.defer();
     index = index || 0;
@@ -129,14 +128,18 @@ function createDataStore (execlib, leveldblib) {
 
   LDBDataStore.prototype.resolveFetchDeferAfterSuccessfulPut = function (missingfound, defer, index) {
     var keyval = missingfound[index];
-    console.log('resolveFetchDeferAfterSuccessfulPut', keyval);
     var fd = this.outerFetchDefers.remove(keyval[0]);
-    console.log('for key', keyval[0], 'got defer', fd);
     if (fd) {
       fd.resolve(keyval);
     }
     this.putMissing(missingfound, defer, index+1);
   };
+  
+  function foundNmissingJoiner (found, missingfound) {
+    var ret = found.concat(missingfound);
+    found = null;
+    return q(ret);
+  }
 
   return q(LDBDataStore);
 }
