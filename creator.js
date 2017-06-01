@@ -83,7 +83,7 @@ function createDataStore (execlib, leveldblib) {
   };
 
   LDBDataStore.prototype.onFetchAndReportMissing = function (foundandmissing) {
-    console.log(foundandmissing);
+    //console.log(foundandmissing);
     var found = foundandmissing.found,
       missing = foundandmissing.missing,
       missingpromises,
@@ -97,7 +97,7 @@ function createDataStore (execlib, leveldblib) {
     missingpromises = [];
     tofetch = [];
     missing.forEach(this.decideForOuterFetch.bind(this, missingpromises, tofetch));
-    console.log('missingpromises', missingpromises, 'tofetch', tofetch);
+    //console.log('missingpromises', missingpromises, 'tofetch', tofetch);
     if (tofetch.length>0) {
       this.outerFetcher(tofetch).then(
         this.onMissingFetched.bind(this)
@@ -119,7 +119,7 @@ function createDataStore (execlib, leveldblib) {
   LDBDataStore.prototype.onSingleFetchedForReportMissing = function (keys, defer, index, found, missing, dbval) {
     var key = keys[index];
     if (dbval===null) {
-      console.log(key, 'not found');
+      //console.log(key, 'not found');
       missing.push(key);
     } else {
       found.push([key, dbval]);
