@@ -1,5 +1,5 @@
 describe('Test with Reuters Datascope', function () {
-  loadClientSide(['allex:reuters_talker:lib', 'allex:leveldbdatastore:lib']);
+  loadClientSide(['allex_reuters_talkerlib', 'allex_leveldbdatastorelib']);
   it ('Create a Reuters talker', function () {
     return setGlobal('ReutersTalker', new reuters_talkerlib('9011813', 'Mica1.Tatic2'));
   });
