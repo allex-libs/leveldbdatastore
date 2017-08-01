@@ -1,4 +1,4 @@
-function createDataStore (execlib, leveldblib) {
+function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
   'use strict';
 
   var lib = execlib.lib,
@@ -136,6 +136,8 @@ function createDataStore (execlib, leveldblib) {
       this.buildTempDB(missingfound).then(
         this.drainTempDB.bind(this)
       )
+    } else if (missingfound[0] === 'joiner') {
+      this.drainTempDB(missingfound[1]);
     } else {
       return this.putMissing(missingfound);
     }
@@ -150,9 +152,9 @@ function createDataStore (execlib, leveldblib) {
       defer.resolve(missingfound);
     } else {
       keyval = missingfound[index];
-      console.log('keyval?', keyval);
+      //console.log('keyval?', keyval);
       ldbkey = this.toInnerKey(keyval[0]);
-      console.log('will put', keyval[1], 'as', ldbkey);
+      //console.log('will put', keyval[1], 'as', ldbkey);
       this.ldb.put(ldbkey, keyval[1]).then(
         this.resolveFetchDeferAfterSuccessfulPut.bind(this, missingfound, defer, index, ldbkey)
       );
@@ -221,6 +223,7 @@ function createDataStore (execlib, leveldblib) {
       extend = lib.extend;
       //console.log('will put', keyval[1], 'as', ldbkey);
       tdb.upsert(ldbkey, function (record) {
+        console.log('extend', record, 'with', ldbval);
         extend(record, ldbval);
         extend = null;
         ldbval = null;
