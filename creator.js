@@ -100,7 +100,8 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     //console.log('missingpromises', missingpromises, 'tofetch', tofetch);
     if (tofetch.length>0) {
       this.outerFetcher(tofetch).then(
-        this.onMissingFetched.bind(this)
+        this.onMissingFetched.bind(this),
+        this.onMissingFetchFailed.bind(this, missingpromises)
       );
     }
     return q.all(missingpromises).then(foundNmissingJoiner.bind(null, found));
@@ -141,6 +142,12 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     } else {
       return this.putMissing(missingfound);
     }
+  };
+
+  LDBDataStore.prototype.onMissingFetchFailed = function (missingpromises, err) {
+    missingpromises.forEach(missingpromiserejecter.bind(null, err));
+    missingpromises = null;
+    err = null;
   };
 
   LDBDataStore.prototype.putMissing = function (missingfound, defer, index) {
@@ -252,6 +259,10 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
       this.resolveFetchDeferAfterSuccessfulDrain.bind(this)
     ));
   };
+
+  function missingpromiserejecter (err, missingpromise) {
+    missingpromise.reject(err);
+  }
 
   return q(LDBDataStore);
 }

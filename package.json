@@ -1,6 +1,6 @@
 {
   "name": "allex_leveldbdatastorelib",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "AllexJS library for a LevelDB-based data store",
   "main": "index.js",
   "scripts": {
