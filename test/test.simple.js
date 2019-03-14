@@ -1,5 +1,4 @@
 function simpleKeyValuer (key) {
-  return q(key+'_value');
   return q([key, key+'_value']);
 }
 
