@@ -1,33 +1,20 @@
-function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
+function createDataStore (execlib, leveldblib, jobondestroyablelib) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
-    qlib = lib.qlib;
+    qlib = lib.qlib,
+    jobs = require('./jobs')(execlib, jobondestroyablelib, leveldblib);
 
   function rejecter (defer) {
     defer.reject(new lib.Error('LDB_DATASTORE_DESTROYING'));
   }
 
   function LDBDataStore (path, outerfetchercb, outerkey2innerkeyfunc, starteddefer) {
-    var mystarteddefer;
     this.outerFetcher = null;
     this.outerkey2innerkeyFunc = null;
     this.ldb = null;
-    if (starteddefer) {
-      mystarteddefer = q.defer();
-      mystarteddefer.promise.then(
-        starteddefer.resolve.bind(starteddefer, this),
-        starteddefer.reject.bind(starteddefer)
-      );
-    }
-    this.ldb = new leveldblib.LevelDBHandler({
-      dbname: path,
-      dbcreationoptions: {
-        valueEncoding: 'json'
-      },
-      starteddefer: mystarteddefer
-    });
+    this.ldb = this.createStorage(path, starteddefer);
     this.setOuterFetcher(outerfetchercb);
     this.setOuterKey2InnerKeyFunc(outerkey2innerkeyfunc);
     this.outerFetchDefers = new lib.Map();
@@ -46,6 +33,24 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     this.ldb = null;
   };
 
+  LDBDataStore.prototype.createStorage = function (path, starteddefer) {
+    var mystarteddefer;
+    if (starteddefer) {
+      mystarteddefer = q.defer();
+      mystarteddefer.promise.then(
+        starteddefer.resolve.bind(starteddefer, this),
+        starteddefer.reject.bind(starteddefer)
+      );
+    }
+    return new leveldblib.LevelDBHandler({
+      dbname: path,
+      dbcreationoptions: {
+        valueEncoding: 'json'
+      },
+      starteddefer: mystarteddefer
+    })
+  };
+
   LDBDataStore.prototype.setOuterFetcher = function (outerfetchercb) {
     this.outerFetcher = outerfetchercb;
   };
@@ -55,12 +60,13 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
   };
 
   LDBDataStore.prototype.fetch = function (keys) {
-    return this.fetchAndReportMissing(keys).then(
-      this.onFetchAndReportMissing.bind(this)
-    );
+    return (new this.jobs.FetcherJob(this, keys)).go();
   };
 
   LDBDataStore.prototype.fetchAndReportMissing = function (keys, defer, index, found, missing, missingindices) {
+    return (new this.jobs.FetchAndReportMissingJob(this, keys)).go();
+    /*
+    var innerkey;
     defer = defer || q.defer();
     index = index || 0;
     found = found || [];
@@ -69,12 +75,14 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     if (index >= keys.length) {
       defer.resolve({found: found, missing: missing, missingindices: missingindices});
     } else {
-      this.ldb.safeGet(this.toInnerKey(keys[index]), null).then(
-        this.onSingleFetchedForReportMissing.bind(this, keys, defer, index, found, missing, missingindices),
+      innerkey = this.toInnerKey(keys[index]);
+      this.ldb.safeGet(innerkey, null).then(
+        this.onSingleFetchedForReportMissing.bind(this, keys, defer, index, found, missing, missingindices, innerkey),
         defer.reject.bind(defer)
       );
     }
     return defer.promise;
+    */
   };
 
   LDBDataStore.prototype.toInnerKey = function (outerkey) {
@@ -83,43 +91,8 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
       outerkey;
   };
 
-  LDBDataStore.prototype.onFetchAndReportMissing = function (foundandmissing) {
-    //console.log(foundandmissing);
-    var found = foundandmissing.found,
-      missing = foundandmissing.missing,
-      missingindices = foundandmissing.missingindices,
-      missingpromises,
-      tofetch;
-    if (!(missing && missing.length>0)) {
-      return q(found);
-    }
-    if (!this.outerFetcher) {
-      return q.reject(new lib.Error('NO_OUTER_FETCHER_CB', 'Cannot fecher outer data without an outerFetcher function'));
-    }
-    missingpromises = [];
-    tofetch = [];
-    missing.forEach(this.decideForOuterFetch.bind(this, missingpromises, tofetch));
-    //console.log('missingpromises', missingpromises, 'tofetch', tofetch);
-    if (tofetch.length>0) {
-      this.outerFetcher(tofetch).then(
-        this.onMissingFetched.bind(this),
-        this.onMissingFetchFailed.bind(this, missingpromises)
-      );
-    }
-    return q.all(missingpromises).then(foundNmissingJoiner.bind(null, found, missingindices));
-  };
-
-  LDBDataStore.prototype.decideForOuterFetch = function (missingpromises, tofetch, miss) {
-    var mymiss = this.toInnerKey(miss), fd = this.outerFetchDefers.get(mymiss);
-    if (!fd) {
-      fd = q.defer();
-      tofetch.push(miss);
-      this.outerFetchDefers.add(mymiss, fd);
-    }
-    missingpromises.push(fd.promise);
-  };
-
-  LDBDataStore.prototype.onSingleFetchedForReportMissing = function (keys, defer, index, found, missing, missingindices, dbval) {
+  /*
+  LDBDataStore.prototype.onSingleFetchedForReportMissing = function (keys, defer, index, found, missing, missingindices, innerkey, dbval) {
     var key = keys[index];
     if (dbval===null) {
       //console.log(key, 'not found');
@@ -127,31 +100,29 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
       missing.push(key);
       missingindices.push(index);
     } else {
-      found.push([key, dbval]);
+      if (!lib.isString(key)) {
+        console.log('zasto ovde ide Object?', key);
+      }
+      found.push([innerkey, dbval]);
     }
     this.fetchAndReportMissing(keys, defer, index+1, found, missing, missingindices);
   };
+  */
 
   LDBDataStore.prototype.onMissingFetched = function (missingfound) {
     if (!lib.isArray(missingfound)) {
-      return;
+      return q([]);
     }
     if (missingfound[0] === 'complex') {
       missingfound.shift();
-      this.buildTempDB(missingfound).then(
+      return this.buildTempDB(missingfound).then(
         this.drainTempDB.bind(this)
       )
-    } else if (missingfound[0] === 'joiner') {
-      this.drainTempDB(missingfound[1]);
-    } else {
-      return this.putMissing(missingfound);
     }
-  };
-
-  LDBDataStore.prototype.onMissingFetchFailed = function (missingpromises, err) {
-    missingpromises.forEach(missingpromiserejecter.bind(null, err));
-    missingpromises = null;
-    err = null;
+    if (missingfound[0] === 'joiner') {
+      return this.drainTempDB(missingfound[1]);
+    }
+    return this.putMissing(missingfound);
   };
 
   LDBDataStore.prototype.putMissing = function (missingfound, defer, index) {
@@ -171,7 +142,7 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
       }
       //console.log('keyval?', keyval);
       ldbkey = this.toInnerKey(keyval[0]);
-      console.log('will put', keyval[1], 'as', ldbkey);
+      //console.log('will put', keyval[1], 'as', ldbkey);
       this.ldb.put(ldbkey, keyval[1]).then(
         this.resolveFetchDeferAfterSuccessfulPut.bind(this, missingfound, defer, index, ldbkey)
       );
@@ -180,7 +151,7 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
   };
 
   LDBDataStore.prototype.resolveFetchDeferAfterSuccessfulPut = function (missingfound, defer, index, ldbkey) {
-    console.log('resolveFetchDeferAfterSuccessfulPut', missingfound, index);
+    //console.log('resolveFetchDeferAfterSuccessfulPut', missingfound, index);
     this.resolveFetchDefer(ldbkey, missingfound[index][1]);
     this.putMissing(missingfound, defer, index+1);
   };
@@ -197,22 +168,11 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     return q(true);
   };
   
-  function foundNmissingJoiner (found, missingindices, missingfound) {
-    var i;
-    if (!(lib.isArray(missingindices) && lib.isArray(missingfound) && missingindices.length===missingfound.length)) {
-      return q.reject(new lib.Error('MISSING_FOUND_LENGTH_MISMATCH', 'Originally missing items: '+missingindices.length+', found: '+missingfound.length+', this is a mismatch!'));
-    }
-    for (i=0; i<missingindices.length; i++) {
-      found[missingindices[i]] = missingfound[i];
-    }
-    return q(found);
-    /*
-    var ret = found.concat(missingfound);
-    found = null;
-    return q(ret);
-    */
-  }
+  LDBDataStore.prototype.buildTempDB = function (missingfound) {
+    return (new this.jobs.BuildTempDBJob(this, missingfound)).go();
+  };
 
+  /*
   LDBDataStore.prototype.buildTempDB = function (missingfound) {
     var sd = q.defer(),
       ret,
@@ -262,6 +222,7 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     }
     return defer.promise;
   };
+  */
 
   LDBDataStore.prototype.drainTempDB = function (tdb) {
     var missingfound = [], returner = qlib.returner(missingfound);
@@ -281,9 +242,7 @@ function createDataStore (execlib, leveldblib, leveldbjoinerlib) {
     ));
   };
 
-  function missingpromiserejecter (err, missingpromise) {
-    missingpromise.reject(err);
-  }
+  LDBDataStore.prototype.jobs = jobs;
 
   return q(LDBDataStore);
 }
