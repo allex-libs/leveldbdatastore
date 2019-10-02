@@ -42,7 +42,6 @@ function createFetcherJob (lib, mylib) {
       _tf;
     this.found = foundandmissing.found;
     if (!(missing && missing.length>0)) {
-      console.log('found all', this.found);
       this.resolve(this.found);
       return;
     }
