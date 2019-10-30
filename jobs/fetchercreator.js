@@ -8,7 +8,6 @@ function createFetcherJob (lib, mylib) {
     JobOnLDBDataStore.call(this, ds, defer);
     this.keys = keys;
     this.missingdefers = null;
-    this.missingpromises = null;
     this.found = null;
     this.missingindices = null;
   }
@@ -16,7 +15,6 @@ function createFetcherJob (lib, mylib) {
   FetcherJob.prototype.destroy = function () {
     this.missingindices = null;
     this.found = null;
-    this.missingpromises = null;
     this.missingdefers = null;
     this.keys = null;
     JobOnLDBDataStore.prototype.destroy.call(this);
@@ -36,45 +34,26 @@ function createFetcherJob (lib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
-    var missing = foundandmissing.missing,
-      tofetch,
-      _mps,
-      _tf;
-    this.found = foundandmissing.found;
-    if (!(missing && missing.length>0)) {
-      this.resolve(this.found);
-      return;
+    if (!(
+      foundandmissing.missing &&
+      lib.isArray(foundandmissing.missing.promises) && 
+      foundandmissing.missing.promises.length>0)) {
+      this.resolve(foundandmissing.found);
     }
-    this.missingdefers = [];
-    this.missingpromises = [];
-    this.missingindices = foundandmissing.missingindices;
-    tofetch = [];
-    _tf = tofetch;
-    missing.forEach(this.decideForOuterFetch.bind(this, _tf));
-    _mps = null;
-    _tf = null;
-    //console.log('missingpromises', missingpromises, 'tofetch', tofetch);
-    if (tofetch.length>0) {
-      this.destroyable.outerFetcher(tofetch).then(
+    this.found = foundandmissing.found;
+    this.missingdefers = foundandmissing.missing.defers;
+    this.missingindices = foundandmissing.missing.indices;
+    if (lib.isArray(foundandmissing.tofetch) && foundandmissing.tofetch.length>0) {
+      this.destroyable.outerFetcher(foundandmissing.tofetch).then(
         this.onMissingFetched.bind(this),
         this.onMissingFetchFailed.bind(this),
         this.notify.bind(this)
       );
     }
-    q.all(this.missingpromises).then(
+    q.all(foundandmissing.missing.promises).then(
       this.foundNmissingJoiner.bind(this),
       this.reject.bind(this)
     );
-  };
-  FetcherJob.prototype.decideForOuterFetch = function (tofetch, miss) {
-    var mymiss = this.destroyable.toInnerKey(miss), fd = this.destroyable.outerFetchDefers.get(mymiss);
-    if (!fd) {
-      fd = q.defer();
-      tofetch.push(miss);
-      this.missingdefers.push(fd);
-      this.destroyable.outerFetchDefers.add(mymiss, fd);
-    }
-    this.missingpromises.push(fd.promise);
   };
   FetcherJob.prototype.onMissingFetched = function (missingfound) {
     if (!this.okToProceed()) {

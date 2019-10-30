@@ -18,8 +18,13 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
     this.setOuterFetcher(outerfetchercb);
     this.setOuterKey2InnerKeyFunc(outerkey2innerkeyfunc);
     this.outerFetchDefers = new lib.Map();
+    this.fetchingQ = new qlib.JobCollection();
   }
   LDBDataStore.prototype.destroy = function () {
+    if (this.fetchingQ) {
+      this.fetchingQ.destroy();
+    }
+    this.fetchingQ = null;
     if (this.outerFetchDefers) {
       this.outerFetchDefers.traverse(rejecter);
       this.outerFetchDefers.destroy;
@@ -63,26 +68,12 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
     return (new this.jobs.FetcherJob(this, keys)).go();
   };
 
+  LDBDataStore.prototype.removeSelfKeys = function (keys) {
+    return this.fetchingQ.run('.', new this.jobs.SelfKeysRemoverJob(this, keys));
+  };
+
   LDBDataStore.prototype.fetchAndReportMissing = function (keys, defer, index, found, missing, missingindices) {
-    return (new this.jobs.FetchAndReportMissingJob(this, keys)).go();
-    /*
-    var innerkey;
-    defer = defer || q.defer();
-    index = index || 0;
-    found = found || [];
-    missing = missing || [];
-    missingindices = missingindices || [];
-    if (index >= keys.length) {
-      defer.resolve({found: found, missing: missing, missingindices: missingindices});
-    } else {
-      innerkey = this.toInnerKey(keys[index]);
-      this.ldb.safeGet(innerkey, null).then(
-        this.onSingleFetchedForReportMissing.bind(this, keys, defer, index, found, missing, missingindices, innerkey),
-        defer.reject.bind(defer)
-      );
-    }
-    return defer.promise;
-    */
+    return this.fetchingQ.run('.', new this.jobs.FetchAndReportMissingJob(this, keys));
   };
 
   LDBDataStore.prototype.toInnerKey = function (outerkey) {
@@ -90,24 +81,6 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
       this.outerkey2innerkeyFunc(outerkey) :
       outerkey;
   };
-
-  /*
-  LDBDataStore.prototype.onSingleFetchedForReportMissing = function (keys, defer, index, found, missing, missingindices, innerkey, dbval) {
-    var key = keys[index];
-    if (dbval===null) {
-      //console.log(key, 'not found');
-      found.push(null);
-      missing.push(key);
-      missingindices.push(index);
-    } else {
-      if (!lib.isString(key)) {
-        console.log('zasto ovde ide Object?', key);
-      }
-      found.push([innerkey, dbval]);
-    }
-    this.fetchAndReportMissing(keys, defer, index+1, found, missing, missingindices);
-  };
-  */
 
   LDBDataStore.prototype.onMissingFetched = function (missingfound) {
     if (!lib.isArray(missingfound)) {
@@ -151,7 +124,6 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
   };
 
   LDBDataStore.prototype.resolveFetchDeferAfterSuccessfulPut = function (missingfound, defer, index, ldbkey) {
-    //console.log('resolveFetchDeferAfterSuccessfulPut', missingfound, index);
     this.resolveFetchDefer(ldbkey, missingfound[index][1]);
     this.putMissing(missingfound, defer, index+1);
   };
@@ -171,58 +143,6 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
   LDBDataStore.prototype.buildTempDB = function (missingfound) {
     return (new this.jobs.BuildTempDBJob(this, missingfound)).go();
   };
-
-  /*
-  LDBDataStore.prototype.buildTempDB = function (missingfound) {
-    var sd = q.defer(),
-      ret,
-      tdb;
-    ret = sd.promise.then(
-      this.populateTempDB.bind(this, missingfound)
-    );
-    tdb = new leveldblib.LevelDBHandler({
-      dbname: lib.uid()+'temp.db',
-      dbcreationoptions: {
-        valueEncoding: 'json'
-      },
-      starteddefer: sd
-    });
-    return ret;
-  };
-
-  LDBDataStore.prototype.populateTempDB = function (missingfound, tdb) {
-    return (new qlib.PromiseChainerJob(missingfound.map(this.updateTempDBProc.bind(this, tdb)))).go();
-  };
-
-  LDBDataStore.prototype.updateTempDBProc = function (tdb, missingfoundbatch) {
-    return this.updateTempDB.bind(this, tdb, missingfoundbatch, null, 0);
-  };
-
-  LDBDataStore.prototype.updateTempDB = function (tdb, missingfoundbatch, defer, index) {
-    var keyval, ldbkey, ldbval, extend;
-    defer = defer || q.defer();
-    index = index || 0;
-    if (index >= missingfoundbatch.length) {
-      defer.resolve(tdb);
-    } else {
-      keyval = missingfoundbatch[index];
-      ldbkey = this.toInnerKey(keyval[0]);
-      ldbval = keyval[1];
-      extend = lib.extend;
-      //console.log('will put', keyval[1], 'as', ldbkey);
-      tdb.upsert(ldbkey, function (record) {
-        //console.log('extend', record, 'with', ldbval);
-        extend(record, ldbval);
-        extend = null;
-        ldbval = null;
-        return record;
-      }, {}).then(
-        this.updateTempDB.bind(this, tdb, missingfoundbatch, defer, index+1)
-      );
-    }
-    return defer.promise;
-  };
-  */
 
   LDBDataStore.prototype.drainTempDB = function (tdb) {
     var missingfound = [], returner = qlib.returner(missingfound);

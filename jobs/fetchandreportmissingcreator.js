@@ -1,7 +1,8 @@
 function createFetchAndReportMissingJob (lib, mylib) {
   'use strict';
 
-  var JobOnLDBDataStore = mylib.JobOnLDBDataStore;
+  var q = lib.q,
+    JobOnLDBDataStore = mylib.JobOnLDBDataStore;
 
   function FetchAndReportMissingJob (ds, keys, defer) {
     JobOnLDBDataStore.call(this, ds, defer);
@@ -10,9 +11,15 @@ function createFetchAndReportMissingJob (lib, mylib) {
     this.found = [];
     this.missing = [];
     this.missingindices = [];
+    this.missingdefers = [];
+    this.missingpromises = [];
+    this.tofetch = [];
   }
   lib.inherit(FetchAndReportMissingJob, JobOnLDBDataStore);
   FetchAndReportMissingJob.prototype.destroy = function () {
+    this.tofetch = null;
+    this.missingpromises = null;
+    this.missingdefers = null;
     this.missingindices = null;
     this.missing = null;
     this.found = null;
@@ -37,7 +44,16 @@ function createFetchAndReportMissingJob (lib, mylib) {
       return;
     }
     if (this.index >= this.keys.length) {
-      this.resolve({found: this.found, missing: this.missing, missingindices: this.missingindices});
+      this.missing.forEach(this.decideForOuterFetch.bind(this));
+      this.resolve({
+        found: this.found,
+        missing: {
+          promises: this.missingpromises,
+          defers: this.missingdefers,
+          indices: this.missingindices
+        },
+        tofetch: this.tofetch
+      });
       return;
     }
     innerkey = this.destroyable.toInnerKey(this.keys[this.index]);
@@ -61,6 +77,17 @@ function createFetchAndReportMissingJob (lib, mylib) {
     }
     this.index++;
     this.fetchOne();
+  };
+  FetchAndReportMissingJob.prototype.decideForOuterFetch = function (miss) {
+    var mymiss = this.destroyable.toInnerKey(miss),
+      fd = this.destroyable.outerFetchDefers.get(mymiss);
+    if (!fd) {
+      fd = q.defer();
+      this.tofetch.push(miss);
+      this.missingdefers.push(fd);
+      this.destroyable.outerFetchDefers.add(mymiss, fd);
+    }
+    this.missingpromises.push(fd.promise);
   };
 
   mylib.FetchAndReportMissingJob = FetchAndReportMissingJob;
