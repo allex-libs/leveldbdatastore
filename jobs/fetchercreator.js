@@ -37,8 +37,10 @@ function createFetcherJob (lib, mylib) {
     if (!(
       foundandmissing.missing &&
       lib.isArray(foundandmissing.missing.promises) && 
-      foundandmissing.missing.promises.length>0)) {
+      foundandmissing.missing.promises.length>0
+    )) {
       this.resolve(foundandmissing.found);
+      return;
     }
     this.found = foundandmissing.found;
     this.missingdefers = foundandmissing.missing.defers;

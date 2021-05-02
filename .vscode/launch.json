@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "name": "Launch via allex-mocha",
+            "request": "launch",
+            "runtimeArgs": [
+                "test/test.withfailure.js"
+            ],
+            "runtimeExecutable": "allex-mocha",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "pwa-node"
+        }
+    ]
+}
