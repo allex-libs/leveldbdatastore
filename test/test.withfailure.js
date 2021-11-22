@@ -6,7 +6,7 @@ function createMyMachine () {
   }
   lib.inherit(Machine, DataStoreTestComplexMachine);
   Machine.prototype.destroy = function () {
-    DataStoreTestComplexMachine.prototype.destroy.call(this);
+    return DataStoreTestComplexMachine.prototype.destroy.call(this);
   };
   Machine.prototype.ensureFirstSuccessDoesNotOverlap = function () {
     return this.fetchNames(this.firstRequestNames).then(
@@ -73,21 +73,26 @@ describe('Test a complex datastore', function () {
   loadMochaIntegration('allex_leveldbdatastorelib');
   loadClientSide(['allex:leveldbdatastore:lib']);
   it('Create test Classes', createMyMachine);
-  it('Create a Machine', function () {
-    setGlobal('machine', new Machine());
+  it('Create a Machine (for clear init)', function () {
+    return setGlobal('machine', new Machine());
+  });
+  it('Init machine', function () { return machine.init(); });
+  it('Destroy machine', function () { this.timeout(1e7); return machine.destroy(); });
+  it('Create a Machine (this time for real)', function () {
+    return setGlobal('machine', new Machine());
   });
   it('Init machine', function () { return machine.init(); });
   it('Send first request (that will fail)', function () { 
     machine.communications.addRunning(
       'first',
-      DataStore,
+      machine,
       machine.arrayize(machine.firstRequestNames),
       {block: true}    );
    });
    it('Send second, overlapping, request (that will succeed)', function () { 
     machine.communications.addRunning(
       'second',
-      DataStore,
+      machine,
       machine.arrayize(machine.secondRequestNames),
       {block: true}    );
    } );
@@ -104,7 +109,7 @@ describe('Test a complex datastore', function () {
     machine.communications.clear('first');
     machine.communications.addRunning(
       'first',
-      DataStore,
+      machine,
       machine.arrayize(machine.firstRequestNames),
       {block: true}    );
    });
@@ -116,5 +121,5 @@ describe('Test a complex datastore', function () {
     function () {
       return machine.ensureFirstSuccessDoesNotOverlap();
     });
-  it('Destroy machine', function () { return machine.destroy(); });
+  it('Destroy machine', function () { this.timeout(1e7); return machine.destroy(); });
 });

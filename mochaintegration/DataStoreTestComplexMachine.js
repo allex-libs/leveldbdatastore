@@ -4,9 +4,14 @@ function DataStoreTestComplexMachine (globaldatastorename) {
 }
 lib.inherit(DataStoreTestComplexMachine, DataStoreTestMachine);
 DataStoreTestComplexMachine.prototype.destroy = function () {
-  DataStoreTestMachine.prototype.destroy.call(this);
+  return DataStoreTestMachine.prototype.destroy.call(this);
 }
 DataStoreTestComplexMachine.prototype.outerFetcherCallback = function (keys){
+  var tmperr = this.tempError;
+  this.tempError = null;
+  if (tmperr) {
+    return q.reject(tmperr);
+  }
   return q.all([
     q.all(keys.map(this.complexKeyValuer1.bind(this))),
     q.all(keys.map(this.complexKeyValuer2.bind(this)))

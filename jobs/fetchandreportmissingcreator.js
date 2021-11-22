@@ -12,6 +12,7 @@ function createFetchAndReportMissingJob (lib, mylib) {
     this.missing = [];
     this.missingindices = [];
     this.missingdefers = [];
+    this.missingdeferkeys = [];
     this.missingpromises = [];
     this.tofetch = [];
   }
@@ -19,6 +20,7 @@ function createFetchAndReportMissingJob (lib, mylib) {
   FetchAndReportMissingJob.prototype.destroy = function () {
     this.tofetch = null;
     this.missingpromises = null;
+    this.missingdeferkeys = null;
     this.missingdefers = null;
     this.missingindices = null;
     this.missing = null;
@@ -50,6 +52,7 @@ function createFetchAndReportMissingJob (lib, mylib) {
         missing: {
           promises: this.missingpromises,
           defers: this.missingdefers,
+          deferkeys: this.missingdeferkeys,
           indices: this.missingindices
         },
         tofetch: this.tofetch
@@ -85,6 +88,7 @@ function createFetchAndReportMissingJob (lib, mylib) {
       fd = q.defer();
       this.tofetch.push(miss);
       this.missingdefers.push(fd);
+      this.missingdeferkeys.push(mymiss);
       this.destroyable.outerFetchDefers.add(mymiss, fd);
     }
     this.missingpromises.push(fd.promise);

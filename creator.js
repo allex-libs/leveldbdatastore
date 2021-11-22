@@ -66,14 +66,17 @@ function createDataStore (execlib, leveldblib, jobondestroyablelib) {
 
   LDBDataStore.prototype.fetch = function (keys) {
     return (new this.jobs.FetcherJob(this, keys)).go();
+    //return this.fetchingQ.run('.', new this.jobs.FetcherJob(this, keys));
   };
 
   LDBDataStore.prototype.removeSelfKeys = function (keys) {
     return this.fetchingQ.run('.', new this.jobs.SelfKeysRemoverJob(this, keys));
+    //return (new this.jobs.SelfKeysRemoverJob(this, keys)).go();
   };
 
   LDBDataStore.prototype.fetchAndReportMissing = function (keys, defer, index, found, missing, missingindices) {
     return this.fetchingQ.run('.', new this.jobs.FetchAndReportMissingJob(this, keys));
+    //return (new this.jobs.FetchAndReportMissingJob(this, keys)).go();
   };
 
   LDBDataStore.prototype.toInnerKey = function (outerkey) {

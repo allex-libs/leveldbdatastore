@@ -35,8 +35,10 @@ function DataStoreTestMachine (globaldatastorename) {
   this.datastore = null;
   this.communications = new DataStoreCommunications();
   this.outgoingItemsCountDefer = null;
+  this.tempError = null;
 }
 DataStoreTestMachine.prototype.destroy = function () {
+  this.tempError = null;
   if (this.outgoingItemsCountDefer) {
     this.outgoingItemsCountDefer.reject(new lib.Error('ALREADY_DYING', 'This instance of '+this.constructor.name+' is dying'));
   }
@@ -64,7 +66,10 @@ DataStoreTestMachine.prototype.onInit = function (ds) {
   this.datastore = ds;
   setGlobal(this.globaldatastorename || 'DataStore', ds);
   return this;
-}
+};
+DataStoreTestMachine.prototype.setError = function (reason) {
+  this.tempError = reason;
+};
 DataStoreTestMachine.prototype.expectOuterFetcherCount = function (expected) {
   if (this.outgoingItemsCountDefer) {
     this.outgoingItemsCountDefer.reject(new lib.Error('NEVER_ENCOUNTERED_AN_OUTGOING_REQUEST', 'This defer never entered the outgoing functionality from DataStore'));

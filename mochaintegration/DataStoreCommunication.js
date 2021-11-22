@@ -1,8 +1,8 @@
 var JobBase = qlib.JobBase;
 
-function DataStoreCommunication (datastore, data, options, defer) {
+function DataStoreCommunication (machine, data, options, defer) {
   JobBase.call(this, defer);
-  this.datastore = datastore;
+  this.machine = machine;
   this.data = data;
   this.block = null;
   this.initFromOptions(options);
@@ -13,7 +13,7 @@ DataStoreCommunication.prototype.destroy = function () {
     this.block.reject(new lib.Error('ALREADY_DESTROYED', 'DataStoreCommunication dying'));
   }
   this.block = null;
-  this.datastore = null;
+  this.machine = null;
   JobBase.prototype.destroy.call(this);
 };
 DataStoreCommunication.prototype.initFromOptions = function (options){
@@ -30,7 +30,7 @@ DataStoreCommunication.prototype.go = function () {
   }
   if (this.block) {
     qlib.promise2defer(
-      this.block.promise.then(this.sendingProc.bind(this)),
+      this.block.promise.then(this.sendingProc.bind(this, null), this.onBlockFailure.bind(this)),
       this
     );
     return ok.val;
@@ -41,11 +41,17 @@ DataStoreCommunication.prototype.go = function () {
   );
   return ok.val;
 };
-DataStoreCommunication.prototype.sendingProc = function () {
+DataStoreCommunication.prototype.onBlockFailure = function (reason) {
+  return this.sendingProc(reason);
+};
+DataStoreCommunication.prototype.sendingProc = function (reason) {
   if (!this.okToProceed()){
     return;
   }
-  return this.datastore.fetch(this.data);
+  if (reason) {
+    this.machine.setError(reason);
+  }
+  return this.machine.fetchWhatever(this.data);
 };
 DataStoreCommunication.prototype.unblock = function (reason) {
   if (!this.block) return;

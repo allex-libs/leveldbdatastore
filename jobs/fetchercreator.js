@@ -8,6 +8,7 @@ function createFetcherJob (lib, mylib) {
     JobOnLDBDataStore.call(this, ds, defer);
     this.keys = keys;
     this.missingdefers = null;
+    this.missingdeferkeys = null;
     this.found = null;
     this.missingindices = null;
   }
@@ -15,6 +16,7 @@ function createFetcherJob (lib, mylib) {
   FetcherJob.prototype.destroy = function () {
     this.missingindices = null;
     this.found = null;
+    this.missingdeferkeys = null;
     this.missingdefers = null;
     this.keys = null;
     JobOnLDBDataStore.prototype.destroy.call(this);
@@ -44,6 +46,7 @@ function createFetcherJob (lib, mylib) {
     }
     this.found = foundandmissing.found;
     this.missingdefers = foundandmissing.missing.defers;
+    this.missingdeferkeys = foundandmissing.missing.deferkeys;
     this.missingindices = foundandmissing.missing.indices;
     if (lib.isArray(foundandmissing.tofetch) && foundandmissing.tofetch.length>0) {
       this.destroyable.outerFetcher(foundandmissing.tofetch).then(
@@ -64,7 +67,11 @@ function createFetcherJob (lib, mylib) {
     this.destroyable.onMissingFetched(missingfound);
   };
   FetcherJob.prototype.onMissingFetchFailed = function (err) {
-    this.missingdefers.forEach(missingdeferrejecter.bind(null, err));
+    if (!this.okToProceed()) {
+      return;
+    }
+    this.missingdeferkeys.forEach(this.missingKeyRejecter.bind(this, err));
+    this.reject(err);
     err = null;
   };
   FetcherJob.prototype.foundNmissingJoiner = function (missingfound) {
@@ -76,12 +83,14 @@ function createFetcherJob (lib, mylib) {
       this.found[this.missingindices[i]] = missingfound[i];
     }
     this.resolve(this.found);
-  }
-
-
-  function missingdeferrejecter (err, missingdefer) {
-    missingdefer.reject(err);
-  }
+  };
+  FetcherJob.prototype.missingKeyRejecter = function (err, missingkey) {
+    var fd;
+    fd = this.destroyable.outerFetchDefers.remove(missingkey);
+    if (fd) {
+      fd.reject(err);
+    }
+  };
 
   mylib.FetcherJob = FetcherJob;
 }
